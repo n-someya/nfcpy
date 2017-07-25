@@ -91,7 +91,7 @@ class SnepClient(object):
         requests with a single connection.
         """
         if not service_name:
-            service_name = default_service_name
+            service_name = self.default_service_name
 
         self.close()
         self.socket = nfc.llcp.Socket(self.llc, nfc.llcp.DATA_LINK_CONNECTION)
