@@ -77,17 +77,22 @@ def recv_response(socket, acceptable_length, timeout):
 class SnepClient(object):
     """ Simple NDEF exchange protocol - client implementation
     """
-    def __init__(self, llc, max_ndef_msg_recv_size=1024):
+    def __init__(self, llc, max_ndef_msg_recv_size=1024,
+                 default_service_name=b'urn:nfc:sn:snep'):
+        self.default_service_name = default_service_name
         self.acceptable_length = max_ndef_msg_recv_size
         self.socket = None
         self.llc = llc
 
-    def connect(self, service_name):
+    def connect(self, service_name=None):
         """Connect to a SNEP server. This needs only be called to
         connect to a server other than the Default SNEP Server at
         `urn:nfc:sn:snep` or if the client wants to send multiple
         requests with a single connection.
         """
+        if not service_name:
+            service_name = default_service_name
+
         self.close()
         self.socket = nfc.llcp.Socket(self.llc, nfc.llcp.DATA_LINK_CONNECTION)
         self.socket.connect(service_name)
@@ -139,7 +144,7 @@ class SnepClient(object):
 
         if not self.socket:
             try:
-                self.connect('urn:nfc:sn:snep')
+                self.connect()
             except nfc.llcp.ConnectRefused:
                 return None
             else:
@@ -148,20 +153,20 @@ class SnepClient(object):
             self.release_connection = False
 
         try:
-            request = struct.pack('>BBLL', 0x10, 0x01, 4 + len(octets),
-                                  self.acceptable_length) + octets
+            req = struct.pack('>BBLL', 0x10, 0x01, 4 + len(octets),
+                              self.acceptable_length) + octets
 
-            if not send_request(self.socket, request, self.send_miu):
+            if not send_request(self.socket, req, self.send_miu):
                 return None
 
-            response = recv_response(
-                self.socket, self.acceptable_length, timeout)
+            rsp = recv_response(self.socket, self.acceptable_length, timeout)
 
-            if response is not None:
-                if response[1] != 0x81:
-                    raise SnepError(response[1])
-
-                return response[6:]
+            if rsp and rsp[1] == 0x81:
+                return rsp[6:]
+            elif rsp:
+                raise SnepError(rsp[1])
+            else:
+                return None
 
         finally:
             if self.release_connection:
@@ -196,7 +201,7 @@ class SnepClient(object):
         """
         if not self.socket:
             try:
-                self.connect('urn:nfc:sn:snep')
+                self.connect()
             except nfc.llcp.ConnectRefused:
                 return False
             else:
@@ -205,16 +210,19 @@ class SnepClient(object):
             self.release_connection = False
 
         try:
-            request = struct.pack('>BBL', 0x10, 0x02, len(octets)) + octets
-            if not send_request(self.socket, request, self.send_miu):
+            req = struct.pack('>BBL', 0x10, 0x02, len(octets)) + octets
+
+            if not send_request(self.socket, req, self.send_miu):
                 return False
 
-            response = recv_response(self.socket, 0, timeout)
-            if response is not None:
-                if response[1] != 0x81:
-                    raise SnepError(response[1])
+            rsp = recv_response(self.socket, 0, timeout)
 
-            return True
+            if rsp and rsp[1] == 0x81:
+                return True
+            elif rsp:
+                raise SnepError(rsp[1])
+            else:
+                return None
 
         finally:
             if self.release_connection:
