@@ -44,42 +44,42 @@ def test_connect(llc, dlc, args, service_name):
 
 
 @pytest.mark.parametrize("snep_req, ndef_req, snep_rsp, ndef_rsp", [
-    (HEX('10 01 00000007 00000400 d00000'), None,
-     HEX('10 81 00000003 d00000'), [ndef.Record()]),
-    (HEX('10 01 0000000c 00000400 d101045402656e61'), [ndef.TextRecord('a')],
-     HEX('10 81 00000008 d101045402656e62'), [ndef.TextRecord('b')]),
-    (HEX('10 01 00000007 00000400 d00000'), [ndef.Record()],
-     HEX('10 81 00000002 d000'), None),
-    (HEX('10 01 00000007 00000400 d00000'), [ndef.Record()],
-     HEX(''), None),
+    ('10 01 00000007 00000400 d00000', None,
+     '10 81 00000003 d00000', [ndef.Record()]),
+    ('10 01 0000000c 00000400 d101045402656e61', [ndef.TextRecord('a')],
+     '10 81 00000008 d101045402656e62', [ndef.TextRecord('b')]),
+    ('10 01 00000007 00000400 d00000', [ndef.Record()],
+     '10 81 00000002 d000', None),
+    ('10 01 00000007 00000400 d00000', [ndef.Record()],
+     '', None),
 ])
 def test_get_records(llc, dlc, snep_req, ndef_req, snep_rsp, ndef_rsp):
     llc.send.return_value = True
     llc.poll.return_value = True
-    llc.recv.return_value = snep_rsp
+    llc.recv.return_value = HEX(snep_rsp)
     assert nfc.snep.SnepClient(llc).get_records(ndef_req) == ndef_rsp
     llc.connect.assert_called_once_with(dlc, b'urn:nfc:sn:snep')
-    llc.send.assert_called_once_with(dlc, snep_req, 0)
+    llc.send.assert_called_once_with(dlc, HEX(snep_req), 0)
     llc.poll.assert_called_once_with(dlc, 'recv', 1.0)
     llc.recv.assert_called_once_with(dlc)
     llc.close.assert_called_once_with(dlc)
 
 
 @pytest.mark.parametrize("snep_req, ndef_req, snep_rsp, result", [
-    (HEX('10 02 00000003 d00000'), [ndef.Record()],
-     HEX('10 81 00000000'), True),
-    (HEX('10 02 00000008 d101045402656e61'), [ndef.TextRecord('a')],
-     HEX('10 81 00000000'), True),
-    (HEX('10 02 00000008 d101045402656e61'), [ndef.TextRecord('a')],
-     HEX(''), None),
+    ('10 02 00000003 d00000', [ndef.Record()],
+     '10 81 00000000', True),
+    ('10 02 00000008 d101045402656e61', [ndef.TextRecord('a')],
+     '10 81 00000000', True),
+    ('10 02 00000008 d101045402656e61', [ndef.TextRecord('a')],
+     '', None),
 ])
 def test_put_records(llc, dlc, snep_req, ndef_req, snep_rsp, result):
     llc.send.return_value = True
     llc.poll.return_value = True
-    llc.recv.return_value = snep_rsp
+    llc.recv.return_value = HEX(snep_rsp)
     assert nfc.snep.SnepClient(llc).put_records(ndef_req) == result
     llc.connect.assert_called_once_with(dlc, b'urn:nfc:sn:snep')
-    llc.send.assert_called_once_with(dlc, snep_req, 0)
+    llc.send.assert_called_once_with(dlc, HEX(snep_req), 0)
     llc.poll.assert_called_once_with(dlc, 'recv', 1.0)
     llc.recv.assert_called_once_with(dlc)
     llc.close.assert_called_once_with(dlc)
