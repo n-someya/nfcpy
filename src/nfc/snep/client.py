@@ -40,7 +40,7 @@ def send_request(socket, snep_request, send_miu):
     if socket.recv() != b"\x10\x80\x00\x00\x00\x00":
         return False
 
-    for offset in xrange(send_miu, len(snep_request), send_miu):
+    for offset in range(send_miu, len(snep_request), send_miu):
         fragment = snep_request[offset:offset+send_miu]
         if not socket.send(fragment):
             return False
@@ -124,8 +124,10 @@ class SnepClient(object):
         """
         octets = b''.join(ndef.message_encoder(records)) if records else None
         octets = self.get_octets(octets, timeout)
-        if octets and len(octets) >= 3:
+        try:
             return list(ndef.message_decoder(octets))
+        except ndef.DecodeError:
+            return []
 
     def get_octets(self, octets=None, timeout=1.0):
         """Get NDEF message octets from a SNEP Server.
@@ -139,38 +141,35 @@ class SnepClient(object):
 
         """
         if octets is None:
-            # Send NDEF Message with one empty Record.
+            # Send one empty NDEF Record.
             octets = b'\xd0\x00\x00'
 
-        if not self.socket:
-            try:
-                self.connect()
-            except nfc.llcp.ConnectRefused:
-                return None
-            else:
-                self.release_connection = True
-        else:
-            self.release_connection = False
+        release_connection = False
 
         try:
-            req = struct.pack('>BBLL', 0x10, 0x01, 4 + len(octets),
-                              self.acceptable_length) + octets
+            if not self.socket:
+                self.connect()
+                release_connection = True
 
-            if not send_request(self.socket, req, self.send_miu):
-                return None
+            snep_req = struct.pack('>BBLL', 0x10, 0x01, 4 + len(octets),
+                                   self.acceptable_length) + octets
 
-            rsp = recv_response(self.socket, self.acceptable_length, timeout)
+            if send_request(self.socket, snep_req, self.send_miu):
+                snep_rsp = recv_response(self.socket, self.acceptable_length,
+                                         timeout)
+                if snep_rsp and not snep_rsp[1] == 0x81:
+                    raise SnepError(snep_rsp[1])
+                if snep_rsp:
+                    return snep_rsp[6:]
 
-            if rsp and rsp[1] == 0x81:
-                return rsp[6:]
-            elif rsp:
-                raise SnepError(rsp[1])
-            else:
-                return None
+        except nfc.llcp.ConnectRefused:
+            pass
 
         finally:
-            if self.release_connection:
+            if release_connection:
                 self.close()
+
+        return b''
 
     def put_records(self, records, timeout=1.0):
         """Send NDEF message records to a SNEP Server.
@@ -199,34 +198,30 @@ class SnepClient(object):
         response.
 
         """
-        if not self.socket:
-            try:
-                self.connect()
-            except nfc.llcp.ConnectRefused:
-                return False
-            else:
-                self.release_connection = True
-        else:
-            self.release_connection = False
+        self.release_connection = False
 
         try:
-            req = struct.pack('>BBL', 0x10, 0x02, len(octets)) + octets
+            if not self.socket:
+                self.connect()
+                self.release_connection = True
 
-            if not send_request(self.socket, req, self.send_miu):
-                return False
+            snep_req = struct.pack('>BBL', 0x10, 0x02, len(octets)) + octets
 
-            rsp = recv_response(self.socket, 0, timeout)
+            if send_request(self.socket, snep_req, self.send_miu):
+                snep_rsp = recv_response(self.socket, 122, timeout)
+                if snep_rsp and not snep_rsp[1] == 0x81:
+                    raise SnepError(snep_rsp[1])
+                if snep_rsp:
+                    return True
 
-            if rsp and rsp[1] == 0x81:
-                return True
-            elif rsp:
-                raise SnepError(rsp[1])
-            else:
-                return None
+        except nfc.llcp.ConnectRefused:
+            pass
 
         finally:
             if self.release_connection:
                 self.close()
+
+        return False
 
     def __enter__(self):
         self.connect()
