@@ -17,15 +17,13 @@ def HEX(s):
 
 
 @pytest.fixture()
-def dlc(mocker):
+def dlc():
     return nfc.llcp.tco.DataLinkConnection(128, 10)
 
 
 @pytest.fixture()
 def llc(mocker, dlc):
     llc = mock.create_autospec(nfc.llcp.llc.LogicalLinkController)
-    #mocker.patch('nfc.llcp.llc.LogicalLinkController', autospec=True)
-    #llc = nfc.llcp.llc.LogicalLinkController()
     llc.socket.return_value = dlc
     return llc
 
@@ -55,11 +53,13 @@ def test_connect(llc, dlc, args, service_name):
      HEX(''), None),
 ])
 def test_get_records(llc, dlc, snep_req, ndef_req, snep_rsp, ndef_rsp):
+    llc.getsockopt.return_value = 128
     llc.send.return_value = True
     llc.poll.return_value = True
     llc.recv.return_value = snep_rsp
     assert nfc.snep.SnepClient(llc).get_records(ndef_req) == ndef_rsp
     llc.connect.assert_called_once_with(dlc, b'urn:nfc:sn:snep')
+    llc.getsockopt.assert_called_once_with(dlc, nfc.llcp.SO_SNDMIU)
     llc.send.assert_called_once_with(dlc, snep_req, 0)
     llc.poll.assert_called_once_with(dlc, 'recv', 1.0)
     llc.recv.assert_called_once_with(dlc)
@@ -75,11 +75,13 @@ def test_get_records(llc, dlc, snep_req, ndef_req, snep_rsp, ndef_rsp):
      HEX(''), None),
 ])
 def test_put_records(llc, dlc, snep_req, ndef_req, snep_rsp, result):
+    llc.getsockopt.return_value = 128
     llc.send.return_value = True
     llc.poll.return_value = True
     llc.recv.return_value = snep_rsp
     assert nfc.snep.SnepClient(llc).put_records(ndef_req) == result
     llc.connect.assert_called_once_with(dlc, b'urn:nfc:sn:snep')
+    llc.getsockopt.assert_called_once_with(dlc, nfc.llcp.SO_SNDMIU)
     llc.send.assert_called_once_with(dlc, snep_req, 0)
     llc.poll.assert_called_once_with(dlc, 'recv', 1.0)
     llc.recv.assert_called_once_with(dlc)
@@ -91,15 +93,17 @@ def test_put_records(llc, dlc, snep_req, ndef_req, snep_rsp, result):
     ({'default_service_name': b'urn:nfc:sn:my-snep'}, b'urn:nfc:sn:my-snep'),
 ])
 def test_with_context_manager(llc, dlc, kwargs, service_name):
+    llc.getsockopt.return_value = 128
     snep_req = HEX('10 01 00000007 00000400 d00000')
     snep_res = HEX('10 81 00000003 d00000')
     llc.send.return_value = True
     llc.poll.return_value = True
     llc.recv.return_value = snep_res
     with nfc.snep.SnepClient(llc, **kwargs) as client:
-        client.get_octets() == HEX('d00000')
-        client.get_octets() == HEX('d00000')
+        assert client.get_octets() == HEX('d00000')
+        assert client.get_octets() == HEX('d00000')
     llc.connect.assert_called_once_with(dlc, service_name)
+    llc.getsockopt.assert_called_once_with(dlc, nfc.llcp.SO_SNDMIU)
     llc.send.assert_has_calls(2 * [mock.call(dlc, snep_req, 0)])
     llc.poll.assert_has_calls(2 * [mock.call(dlc, 'recv', 1.0)])
     llc.recv.assert_has_calls(2 * [mock.call(dlc)])
