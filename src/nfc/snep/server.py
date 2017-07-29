@@ -22,11 +22,13 @@
 #
 # Simple NDEF Exchange Protocol (SNEP) - Server Base Class
 #
-import nfc.llcp
-import nfc.ndef
-
 from threading import Thread
 from struct import pack, unpack
+from binascii import hexlify
+
+import nfc.llcp
+import nfc.ndef
+import ndef
 
 import logging
 log = logging.getLogger(__name__)
@@ -35,78 +37,91 @@ log = logging.getLogger(__name__)
 class SnepServer(Thread):
     """ NFC Forum Simple NDEF Exchange Protocol server
     """
-    def __init__(self, llc, service_name="urn:nfc:sn:snep",
-                 max_acceptable_length=0x100000,
-                 recv_miu=1984, recv_buf=15):
+    def __init__(self, llc, **kwargs):
+        max_acceptable_length = kwargs.get('max_acceptable_length', 0x100000)
+        service_name = kwargs.get('service_name', b'urn:nfc:sn:snep')
+        recv_miu = kwargs.get('recv_miu', 1984)
+        recv_buf = kwargs.get('recv_buf', 15)
+
+        if not hasattr(self, 'get_records'):
+            self.get_records = self._get_records
+        if not hasattr(self, 'put_records'):
+            self.put_records = self._put_records
+        if not hasattr(self, 'get_octets'):
+            self.get_octets = self._get_octets
+        if not hasattr(self, 'put_octets'):
+            self.put_octets = self._put_octets
+        self.set_callback(**kwargs)
 
         self.max_acceptable_length = min(max_acceptable_length, 0xFFFFFFFF)
         socket = nfc.llcp.Socket(llc, nfc.llcp.DATA_LINK_CONNECTION)
         recv_miu = socket.setsockopt(nfc.llcp.SO_RCVMIU, recv_miu)
         recv_buf = socket.setsockopt(nfc.llcp.SO_RCVBUF, recv_buf)
         socket.bind(service_name)
-        log.info("snep server bound to port {0} (MIU={1}, RW={2}), "
+        socket.listen(backlog=2)
+        Thread.__init__(self, target=self._listen, args=(socket,))
+
+        log.info("snep server bound to port {0} (MIU={1}, RW={2}) "
                  "will accept up to {3} byte NDEF messages"
                  .format(socket.getsockname(), recv_miu, recv_buf,
                          self.max_acceptable_length))
-        socket.listen(backlog=2)
-        Thread.__init__(self, name=service_name,
-                        target=self.listen, args=(socket,))
 
-    def listen(self, socket):
+    def set_callback(self, **kwargs):
+        self.get_records = kwargs.get('get_records', self.get_records)
+        self.put_records = kwargs.get('put_records', self.put_records)
+        self.get_octets = kwargs.get('get_octets', self.get_octets)
+        self.put_octets = kwargs.get('put_octets', self.put_octets)
+        return self
+
+    def _listen(self, socket):
         try:
             while True:
                 client_socket = socket.accept()
-                client_thread = Thread(target=SnepServer.serve,
-                                       args=(client_socket, self))
-                client_thread.start()
+                Thread(target=self._serve, args=(client_socket,)).start()
         except nfc.llcp.Error as e:
             (log.debug if e.errno == nfc.llcp.errno.EPIPE else log.error)(e)
         finally:
             socket.close()
-        pass
 
-    @staticmethod
-    def serve(socket, snep_server):
+    def _serve(self, socket):
         peer_sap = socket.getpeername()
         log.info("serving snep client on remote sap {0}".format(peer_sap))
         send_miu = socket.getsockopt(nfc.llcp.SO_SNDMIU)
         try:
             while True:
-                data = socket.recv()
-                if not data:
-                    break  # connection closed
+                snep_request = socket.recv()
+                if not snep_request:
+                    return  # connection closed
 
-                if len(data) < 6:
+                if len(snep_request) < 6:
                     log.debug("snep msg initial fragment too short")
-                    break  # bail out, this is a bad client
+                    return  # bail out, this is a bad client
 
-                version, opcode, length = unpack(">BBL", data[:6])
+                version, opcode, length = unpack(">BBL", snep_request[:6])
                 if (version >> 4) > 1:
                     log.debug("unsupported version {0}".format(version >> 4))
                     socket.send(b"\x10\xE1\x00\x00\x00\x00")
                     continue
 
-                if length > snep_server.max_acceptable_length:
+                if length > self.max_acceptable_length:
                     log.debug("snep msg exceeds max acceptable length")
                     socket.send(b"\x10\xFF\x00\x00\x00\x00")
                     continue
 
-                snep_request = data
                 if len(snep_request) - 6 < length:
                     # request remaining fragments
                     socket.send(b"\x10\x80\x00\x00\x00\x00")
-                    while len(snep_request) - 6 < length:
-                        data = socket.recv()
-                        if data:
-                            snep_request += data
-                        else:
-                            break  # connection closed
+                    try:
+                        while len(snep_request) - 6 < length:
+                            snep_request += socket.recv()
+                    except TypeError:
+                        return  # received None -> connection closed
 
                 # message complete, now handle the request
                 if opcode == 1 and len(snep_request) >= 10:
-                    snep_response = snep_server.__get(snep_request)
+                    snep_response = self._get_request(snep_request)
                 elif opcode == 2:
-                    snep_response = snep_server.__put(snep_request)
+                    snep_response = self._put_request(snep_request)
                 else:
                     log.debug("bad request {0}".format(version & 0x0f))
                     snep_response = b"\x10\xC2\x00\x00\x00\x00"
@@ -127,54 +142,47 @@ class SnepServer(Thread):
         finally:
             socket.close()
 
-    def __get(self, snep_request):
+    def _get_request(self, snep_request):
         acceptable_length = unpack(">L", snep_request[6:10])[0]
-        response = self._get(acceptable_length, snep_request[10:])
-        if type(response) == int:
-            response_code = chr(response)
-            ndef_message = ""
-        else:
-            response_code = chr(0x81)
-            ndef_message = response
-        ndef_length = pack(">L", len(ndef_message))
-        return b"\x10" + response_code + ndef_length + ndef_message
-
-    def _get(self, acceptable_length, ndef_message_data):
-        log.debug("SNEP GET ({0})".format(ndef_message_data.encode("hex")))
         try:
-            ndef_message = nfc.ndef.Message(ndef_message_data)
-        except (nfc.ndef.LengthError, nfc.ndef.FormatError) as err:
-            log.error(repr(err))
-            return 0xC2
+            rsp_octets = self.get_octets(acceptable_length, snep_request[10:])
+            if len(rsp_octets) > acceptable_length:
+                raise nfc.snep.SnepError(0xC1)
+        except nfc.snep.SnepError as error:
+            return pack('BBxxxx', 0x10, error.errno)
         else:
-            rsp = self.get(acceptable_length, ndef_message)
-            return str(rsp) if isinstance(rsp, nfc.ndef.Message) else rsp
+            return pack('>BBL', 0x10, 0x81, len(rsp_octets)) + rsp_octets
 
-    def get(self, acceptable_length, ndef_message):
-        """Handle Get requests. This method should be overwritten by a
-        subclass of SnepServer to customize it's behavior. The default
-        implementation simply returns Not Implemented.
-        """
-        return 0xE0
-
-    def __put(self, snep_request):
-        response = self._put(snep_request[6:])
-        ndef_length = b"\x00\x00\x00\x00"
-        return b"\x10" + chr(response) + ndef_length
-
-    def _put(self, ndef_message_data):
-        log.debug("SNEP PUT ({0})".format(ndef_message_data.encode("hex")))
+    def _get_octets(self, acceptable_length, request_octets):
+        log.debug("SNEP GET {0}".format(hexlify(request_octets)))
         try:
-            ndef_message = nfc.ndef.Message(ndef_message_data)
-        except (nfc.ndef.LengthError, nfc.ndef.FormatError) as err:
-            log.error(repr(err))
-            return 0xC2
+            req_records = list(ndef.message_decoder(request_octets))
+            rsp_records = self.get_records(req_records)
+        except ndef.DecodeError as error:
+            log.error(error)
+            raise nfc.snep.SnepError(0xC2)
         else:
-            return self.put(ndef_message)
+            return b''.join(ndef.message_encoder(rsp_records))
 
-    def put(self, ndef_message):
-        """Handle Put requests. This method should be overwritten by a
-        subclass of SnepServer to customize it's behavior. The default
-        implementation simply returns Not Implemented.
-        """
-        return 0xE0
+    def _get_records(self, request_records):
+        raise nfc.snep.SnepError(0xE0)
+
+    def _put_request(self, snep_request):
+        try:
+            self.put_octets(snep_request[6:])
+        except nfc.snep.SnepError as error:
+            return pack('BBxxxx', 0x10, error.errno)
+        else:
+            return pack('>BBxxxx', 0x10, 0x81)
+
+    def _put_octets(self, request_octets):
+        log.debug("SNEP PUT {0}".format(hexlify(request_octets)))
+        try:
+            req_records = list(ndef.message_decoder(request_octets))
+            self.put_records(req_records)
+        except ndef.DecodeError as error:
+            log.error(error)
+            raise nfc.snep.SnepError(0xC2)
+
+    def _put_records(self, request_records):
+        return
