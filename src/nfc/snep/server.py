@@ -26,9 +26,9 @@ from threading import Thread
 from struct import pack, unpack
 from binascii import hexlify
 
-import nfc.llcp
-import nfc.ndef
+import errno
 import ndef
+import nfc
 
 import logging
 log = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ class SnepServer(Thread):
                 client_socket = socket.accept()
                 Thread(target=self._serve, args=(client_socket,)).start()
         except nfc.llcp.Error as e:
-            (log.debug if e.errno == nfc.llcp.errno.EPIPE else log.error)(e)
+            (log.debug if e.errno == errno.EPIPE else log.error)(e)
         finally:
             socket.close()
 
