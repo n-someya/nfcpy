@@ -284,10 +284,14 @@ class LogicalLinkController(object):
                     name=name, sent=self.sent[name], rcvd=self.rcvd[name])
             return s
 
+    class Private:
+        pass
+
     def __init__(self, **options):
-        self.pcnt = LogicalLinkController.Counter()
-        self.link = LogicalLinkController.LinkState()
-        self.lock = threading.RLock()
+        self.private = LogicalLinkController.Private()  # scope for app data
+        self.pcnt = LogicalLinkController.Counter()     # packet counters
+        self.link = LogicalLinkController.LinkState()   # llcp link state
+        self.lock = threading.RLock()                   # api reentrant lock
         self.cfg = dict()
         self.cfg['recv-miu'] = options.get('miu', 248)
         self.cfg['send-lto'] = options.get('lto', 500)
