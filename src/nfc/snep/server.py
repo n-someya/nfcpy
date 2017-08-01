@@ -35,10 +35,39 @@ log = logging.getLogger(__name__)
 
 
 class SnepServer(Thread):
-    """ NFC Forum Simple NDEF Exchange Protocol server
+    """Simple NDEF Exchange Protocol (SNEP) server implementation. A
+    :class:`SnepServer` must be instantiated before LLCP Link
+    activation (usually within the 'on-startup' callback) with the
+    :class:`~nfc.llcp.llc.LogicalLinkController` instance as the first
+    argument. Additional keyword arguments may be:
+
+    :param bytes service_name: The service name under which this
+       SnepServer will be registered. Defaults to ``b'urn:nfc:sn:snep'``.
+
+    :param int max_acceptable_length: The maximum number of SNEP
+       request information octets the server will accept. Defaults to
+       ``1000000`` octets.
+
+    :param int recv_miu: The maximum number of information octets to
+       receive within a single LLCP Information PDU on the data link
+       connection established by a remote SNEP Client. Defaults to
+       ``1984`` octets.
+
+    :param int recv_buf: The number of receive buffers (receive window
+       size) for the data link connection established by a remote SNEP
+       Client. Defaults to ``15`` buffers.
+
+    :param function get_records: Same as in :meth:`set_callback`
+
+    :param function put_records: Same as in :meth:`set_callback`
+
+    :param function get_octets: Same as in :meth:`set_callback`
+
+    :param function put_octets: Same as in :meth:`set_callback`
+
     """
     def __init__(self, llc, **kwargs):
-        max_acceptable_length = kwargs.get('max_acceptable_length', 0x100000)
+        max_acceptable_length = kwargs.get('max_acceptable_length', 1000000)
         service_name = kwargs.get('service_name', b'urn:nfc:sn:snep')
         recv_miu = kwargs.get('recv_miu', 1984)
         recv_buf = kwargs.get('recv_buf', 15)
@@ -67,6 +96,51 @@ class SnepServer(Thread):
                          self.max_acceptable_length))
 
     def set_callback(self, **kwargs):
+        """Set callback functions for handling SNEP Get or Put requests. A
+        callback operates on either an :class:`ndef.Record` list or
+        octet string.
+
+        :param function get_records: A function to process a SNEP Get
+           request. The function receives the Get request information
+           field as a :class:`ndef.Record` list and must return an
+           :class:`ndef.Record` list or raise :exc:`SnepError`. The
+           default implementation ignores the request data and always
+           returns "Not Implemented" to the client.
+
+        :param function put_records: A function to process a SNEP Put
+           request. The function receives the Put request information
+           field as a :class:`ndef.Record` list and should raise
+           :exc:`SnepError` if processing errors are encountered. The
+           default implementation ignores the request data and always
+           returns "Success" to the client.
+
+        :param function get_octets: A function to process a SNEP Get
+           request. The function receives the Get request information
+           field as a bytes string and must return a bytes string as
+           content for the SNEP Get response information field or
+           raise :exc:`SnepError`. The default implementation calls
+           *get_records()* with the request_octets decoded into NDEF
+           Records and returns the octet representation of the NDEF
+           Records returned by *get_octets()*. The *get_octets()*
+           function receives as a second argument the maximum number
+           of octets that the client is able to accept as response
+           information field.
+
+        :param function put_octets: A function to process a SNEP Put
+           request. The function receives the Put request information
+           field as a bytes string and may raise :exc:`SnepError` if a
+           processing error occured. The default implementation calls
+           *put_records()* with the request_octets decoded into NDEF
+           Records.
+
+        :pep:`484` annotated callback function signatures::
+
+           get_records(request_records: List[ndef.Record]) -> List[ndef.Record]
+           put_records(request_records: List[ndef.Record]) -> None
+           get_octets(request_octets: bytes, acceptable_length: int) -> bytes
+           put_octets(request_octets: bytes) -> bytes
+
+        """
         self.get_records = kwargs.get('get_records', self.get_records)
         self.put_records = kwargs.get('put_records', self.put_records)
         self.get_octets = kwargs.get('get_octets', self.get_octets)
@@ -145,7 +219,7 @@ class SnepServer(Thread):
     def _get_request(self, snep_request):
         acceptable_length = unpack(">L", snep_request[6:10])[0]
         try:
-            rsp_octets = self.get_octets(acceptable_length, snep_request[10:])
+            rsp_octets = self.get_octets(snep_request[10:], acceptable_length)
             if len(rsp_octets) > acceptable_length:
                 raise nfc.snep.SnepError(0xC1)
         except nfc.snep.SnepError as error:
@@ -153,7 +227,7 @@ class SnepServer(Thread):
         else:
             return pack('>BBL', 0x10, 0x81, len(rsp_octets)) + rsp_octets
 
-    def _get_octets(self, acceptable_length, request_octets):
+    def _get_octets(self, request_octets, acceptable_length):
         log.debug("SNEP GET {0}".format(hexlify(request_octets)))
         try:
             req_records = list(ndef.message_decoder(request_octets))
