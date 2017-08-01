@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 # Copyright 2013 Stephen Tiedemann <stephen.tiedemann@gmail.com>
 #
-# Licensed under the EUPL, Version 1.1 or - as soon they 
+# Licensed under the EUPL, Version 1.1 or - as soon they
 # will be approved by the European Commission - subsequent
 # versions of the EUPL (the "Licence");
 # You may not use this work except in compliance with the
@@ -20,10 +20,6 @@
 # See the Licence for the specific language governing
 # permissions and limitations under the Licence.
 # -----------------------------------------------------------------------------
-
-import logging
-log = logging.getLogger('main')
-
 import io
 import time
 import random
@@ -34,11 +30,16 @@ import mimetypes
 from cli import CommandLineInterface
 
 import nfc
+import ndef
 import nfc.snep
-import nfc.ndef
+
+import logging
+log = logging.getLogger('main')
+
 
 def add_send_parser(parser):
-    subparsers = parser.add_subparsers(title="send item", dest="send",
+    subparsers = parser.add_subparsers(
+        title="send item", dest="send",
         description="Construct beam data from the send item and transmit to "
         "the peer device when touched. Use 'beam.py send {item} -h' to learn "
         "additional and/or required arguments per send item.")
@@ -72,16 +73,18 @@ def add_send_parser(parser):
     parser.add_argument(
         "--timeit", action="store_true", help="measure transfer time")
 
+
 def send_message(args, llc, message):
     if args.timeit:
         t0 = time.time()
-    if not nfc.snep.SnepClient(llc).put(message):
+    if not nfc.snep.SnepClient(llc).put_records(message):
         log.error("failed to send message")
     elif args.timeit:
         transfer_time = time.time() - t0
         message_size = len(str(message))
         print("message sent in {0:.3f} seconds ({1} byte @ {2:.0f} byte/sec)"
-            .format(transfer_time, message_size, message_size/transfer_time))
+              .format(transfer_time, message_size, message_size/transfer_time))
+
 
 def add_send_link_parser(parser):
     parser.set_defaults(func=run_send_link_action)
@@ -90,11 +93,13 @@ def add_send_link_parser(parser):
     parser.add_argument(
         "title", help="smartposter title", nargs="?")
 
+
 def run_send_link_action(args, llc):
-    sp = nfc.ndef.SmartPosterRecord(args.uri)
+    record = ndef.SmartposterRecord(args.uri)
     if args.title:
-        sp.title = args.title
-    send_message(args, llc, nfc.ndef.Message(sp))
+        record.title = args.title
+    send_message(args, llc, [record])
+
 
 def add_send_text_parser(parser):
     parser.set_defaults(func=run_send_text_action)
@@ -103,11 +108,13 @@ def add_send_text_parser(parser):
     parser.add_argument(
         "text", metavar="STRING", help="text string")
 
+
 def run_send_text_action(args, llc):
-    record = nfc.ndef.TextRecord(args.text)
+    record = ndef.TextRecord(args.text)
     if args.lang:
         record.language = args.lang
-    send_message(args, llc, nfc.ndef.Message(record))
+    send_message(args, llc, [record])
+
 
 def add_send_file_parser(parser):
     parser.set_defaults(func=run_send_file_action)
@@ -121,19 +128,25 @@ def add_send_file_parser(parser):
         "-n", metavar="NAME", dest="name", default=None,
         help="record name (default: pathname)")
 
+
 def run_send_file_action(args, llc):
     if args.type == 'unknown':
         mimetype = mimetypes.guess_type(args.file.name, strict=False)[0]
-        if mimetype is not None: args.type = mimetype
+        if mimetype is not None:
+            args.type = mimetype
+
     if args.name is None:
         args.name = args.file.name if args.file.name != "<stdin>" else ""
 
     data = args.file.read()
-    try: data = data.decode("hex")
-    except TypeError: pass
+    try:
+        data = data.decode("hex")
+    except TypeError:
+        pass
 
-    record = nfc.ndef.Record(args.type, args.name, data)
-    send_message(args, llc, nfc.ndef.Message(record))
+    record = ndef.Record(args.type, args.name, data)
+    send_message(args, llc, [record])
+
 
 def add_send_ndef_parser(parser):
     parser.set_defaults(func=run_send_ndef_action)
@@ -145,13 +158,18 @@ def add_send_ndef_parser(parser):
         choices=['first', 'last', 'next', 'cycle', 'random'], default="first",
         help="strategies are: %(choices)s")
 
+
 def run_send_ndef_action(args, llc):
     if type(args.ndef) == file:
-        bytestream = io.BytesIO(args.ndef.read())
-        args.ndef = list()
-        while True:
-            try: args.ndef.append(nfc.ndef.Message(bytestream))
-            except nfc.ndef.LengthError: break
+        ostream = io.BytesIO(args.ndef.read())
+        message = list(ndef.message_decoder(ostream))
+        args.ndef = []
+        while message:
+            try:
+                args.ndef.append(message)
+                message = list(ndef.message_decoder(ostream))
+            except ndef.DecodeError as error:
+                log.error("corrupt data file: {}".format(error))
         args.selected = -1
 
     if args.select == "first":
@@ -168,8 +186,10 @@ def run_send_ndef_action(args, llc):
     if args.selected < len(args.ndef):
         send_message(args, llc, args.ndef[args.selected])
 
+
 def add_recv_parser(parser):
-    subparsers = parser.add_subparsers(title="receive action", dest="recv",
+    subparsers = parser.add_subparsers(
+        title="receive action", dest="recv",
         description="On receipt of incoming beam data perform the specified "
         "action. Use 'beam.py recv {action} -h' to learn additional and/or "
         "required arguments per action.")
@@ -191,12 +211,16 @@ def add_recv_parser(parser):
         "to find a matching response to send to the peer device. Each "
         "translation is a pair of in and out NDEF message cat together."))
 
+
 def add_recv_print_parser(parser):
     parser.set_defaults(func=run_recv_print_action)
 
+
 def run_recv_print_action(args, llc, rcvd_ndef_msg):
-    log.info('print ndef message {0!r}'.format(rcvd_ndef_msg.type))
-    print rcvd_ndef_msg.pretty()
+    log.info('print ndef message')
+    for record in rcvd_ndef_msg:
+        print(record)
+
 
 def add_recv_save_parser(parser):
     parser.set_defaults(func=run_recv_save_action)
@@ -204,16 +228,20 @@ def add_recv_save_parser(parser):
         "file", type=argparse.FileType('a+b'),
         help="write ndef to file ('-' write to stdout)")
 
+
 def run_recv_save_action(args, llc, rcvd_ndef_msg):
-    log.info('save ndef message {0!r}'.format(rcvd_ndef_msg.type))
-    args.file.write(str(rcvd_ndef_msg))
+    log.info('save ndef message')
+    args.file.write(b''.join(ndef.message_encoder(rcvd_ndef_msg)))
+
 
 def add_recv_echo_parser(parser):
     parser.set_defaults(func=run_recv_echo_action)
 
+
 def run_recv_echo_action(args, llc, rcvd_ndef_msg):
-    log.info('echo ndef message {0!r}'.format(rcvd_ndef_msg.type))
-    nfc.snep.SnepClient(llc).put(rcvd_ndef_msg)
+    log.info('echo ndef message')
+    nfc.snep.SnepClient(llc).put_records(rcvd_ndef_msg)
+
 
 def add_recv_send_parser(parser):
     parser.set_defaults(func=run_recv_send_action)
@@ -221,37 +249,34 @@ def add_recv_send_parser(parser):
         "translations", type=argparse.FileType('r'),
         help="echo translations file")
 
+
 def run_recv_send_action(args, llc, rcvd_ndef_msg):
-    log.info('translate ndef message {0!r}'.format(rcvd_ndef_msg.type))
+    log.info('translate ndef message')
+
     if type(args.translations) == file:
         bytestream = io.BytesIO(args.translations.read())
-        args.translations = list()
-        while True:
+        args.translations = []
+        msg_recv = list(ndef.message_decoder(bytestream))
+        msg_send = list(ndef.message_decoder(bytestream))
+        while msg_recv and msg_send:
             try:
-                msg_recv = nfc.ndef.Message(bytestream)
-                msg_send = nfc.ndef.Message(bytestream)
                 args.translations.append((msg_recv, msg_send))
-                log.info('added translation {0!r} => {1:!r}'.format(
-                    msg_recv, msg_send))
-            except nfc.ndef.LengthError:
+                log.info('added translation')
+                log.info('  RECV {} '.format(map(str, msg_recv)))
+                log.info('  SEND {} '.format(map(str, msg_send)))
+                msg_recv = list(ndef.message_decoder(bytestream))
+                msg_send = list(ndef.message_decoder(bytestream))
+            except ndef.DecodeError as error:
+                log.error("corrupted translation file: {}".format(error))
                 break
+
     for msg_recv, msg_send in args.translations:
         if msg_recv == rcvd_ndef_msg:
-            log.info('rcvd beam {0!r}'.format(msg_rcvd))
-            log.info('send beam {0!r}'.format(msg_send))
+            log.info('rcvd beam {}'.format(map(str, msg_recv)))
+            log.info('send beam {}'.format(map(str, msg_send)))
             nfc.snep.SnepClient(llc).put(msg_send)
             break
 
-class DefaultServer(nfc.snep.SnepServer):
-    def __init__(self, args, llc):
-        self.args, self.llc = args, llc
-        super(DefaultServer, self).__init__(llc)
-
-    def put(self, ndef_message):
-        log.info("default snep server got put request")
-        if self.args.action == "recv":
-            self.args.func(self.args, self.llc, ndef_message)
-        return nfc.snep.Success
 
 class Main(CommandLineInterface):
     def __init__(self):
@@ -266,15 +291,23 @@ class Main(CommandLineInterface):
             parser, groups="llcp dbg clf")
 
     def on_llcp_startup(self, llc):
-        self.default_snep_server = DefaultServer(self.options, llc)
+        llc.private.snep_server = nfc.snep.SnepServer(llc)
+        llc.private.snep_server.set_callback(put_records=self.put_records)
         return llc
-        
+
     def on_llcp_connect(self, llc):
-        self.default_snep_server.start()
+        llc.private.snep_server.start()
         if self.options.action == "send":
             func, args = self.options.func, ((self.options, llc))
             threading.Thread(target=func, args=args).start()
+        self.llc = llc
         return True
+
+    def put_records(self, ndef_message):
+        log.info("default snep server got put request")
+        if self.options.action == "recv":
+            self.options.func(self.options, self.llc, ndef_message)
+
 
 if __name__ == '__main__':
     Main().run()
