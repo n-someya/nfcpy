@@ -77,10 +77,8 @@ def recv_response(socket, acceptable_length, timeout):
 class SnepClient(object):
     """ Simple NDEF exchange protocol - client implementation
     """
-    def __init__(self, llc, max_ndef_msg_recv_size=1024,
-                 default_service_name=b'urn:nfc:sn:snep'):
+    def __init__(self, llc, default_service_name=b'urn:nfc:sn:snep'):
         self.default_service_name = default_service_name
-        self.acceptable_length = max_ndef_msg_recv_size
         self.socket = None
         self.llc = llc
 
@@ -105,7 +103,7 @@ class SnepClient(object):
             self.socket.close()
             self.socket = None
 
-    def get_records(self, records=None, timeout=1.0):
+    def get_records(self, records=None, acceptable_length=1024, timeout=1.0):
         """Get NDEF message records from a SNEP Server.
 
         .. versionadded:: 0.13
@@ -123,13 +121,13 @@ class SnepClient(object):
 
         """
         octets = b''.join(ndef.message_encoder(records)) if records else None
-        octets = self.get_octets(octets, timeout)
+        octets = self.get_octets(octets, acceptable_length, timeout)
         try:
             return list(ndef.message_decoder(octets))
         except ndef.DecodeError:
             return []
 
-    def get_octets(self, octets=None, timeout=1.0):
+    def get_octets(self, octets=None, acceptable_length=1024, timeout=1.0):
         """Get NDEF message octets from a SNEP Server.
 
         .. versionadded:: 0.13
@@ -152,10 +150,10 @@ class SnepClient(object):
                 release_connection = True
 
             snep_req = struct.pack('>BBLL', 0x10, 0x01, 4 + len(octets),
-                                   self.acceptable_length) + octets
+                                   acceptable_length) + octets
 
             if send_request(self.socket, snep_req, self.send_miu):
-                snep_rsp = recv_response(self.socket, self.acceptable_length,
+                snep_rsp = recv_response(self.socket, acceptable_length,
                                          timeout)
                 if snep_rsp and not snep_rsp[1] == 0x81:
                     raise SnepError(snep_rsp[1])
