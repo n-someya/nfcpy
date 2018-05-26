@@ -42,6 +42,6 @@ __author__ = "Stephen Tiedemann"
 __email__ = "stephen.tiedemann@gmail.com"
 
 __license__ = "EUPL"
-__copyright__ = "Copyright (c) 2009, 2017 Stephen Tiedemann"
+__copyright__ = "Copyright (c) 2009, 2018 Stephen Tiedemann"
 
 ###############################################################################
