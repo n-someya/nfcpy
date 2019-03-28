@@ -52,6 +52,8 @@ listen_dep  yes
 ==========  =======  ============
 
 """
+from typing import Dict
+
 import nfc.clf
 from . import pn53x
 
@@ -102,7 +104,7 @@ class Chipset(pn53x.Chipset):
         0x88: "TgGetInitiatorCommand",
         0x90: "TgResponseToInitiator",
         0x8A: "TgGetTargetStatus",
-    }
+    }  # type: Dict[int, str]
     ERR = {
         0x01: "Time out, the Target has not answered",
         0x02: "Checksum error during RF communication",
@@ -132,7 +134,7 @@ class Chipset(pn53x.Chipset):
         0x2E: "NAD missing in DEP frame",
         0x7f: "Invalid command syntax - received error frame",
         0xff: "Insufficient data received from executing chip command",
-    }
+    }  # type: Dict[int, str]
 
     host_command_frame_max_size = 265
     in_list_passive_target_max_target = 2

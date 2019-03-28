@@ -419,12 +419,12 @@ class Target(DataExchangeProtocol):
 
         if timeout is None:
             timeout = 1.0
-        gbt = options.get('gbt', '')[0:47]
-        lrt = min(max(0, options.get('lrt', 3)), 3)
-        rwt = min(max(0, options.get('rwt', 8)), 14)
+        gbt = options.get('gbt', '')[0:47]  # type: bytes
+        lrt = min(max(0, options.get('lrt', 3)), 3)  # type: int
+        rwt = min(max(0, options.get('rwt', 8)), 14)  # type: int
 
         pp = (lrt << 4) | (bool(gbt) << 1) | int(bool(self.nad))
-        nfcid3t = bytearray.fromhex("01FE") + os.urandom(6) + "ST"
+        nfcid3t = bytearray.fromhex("01FE") + os.urandom(6) + b"ST"
         atr_res = ATR_RES(nfcid3t, 0, 0, 0, rwt, pp, gbt)
         atr_res = atr_res.encode()
 

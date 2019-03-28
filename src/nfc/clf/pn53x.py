@@ -25,6 +25,8 @@ interface chips, namely the NXP PN531, PN532, PN533 and the Sony
 RC-S956.
 
 """
+from typing import Union
+
 import nfc.clf
 from . import device
 
@@ -131,7 +133,7 @@ class Chipset(object):
         self.transport.close()
         self.transport = None
 
-    def command(self, cmd_code, cmd_data, timeout):
+    def command(self, cmd_code: int, cmd_data, timeout):
         """Send a host command and return the chip response. The chip command
         is selected by the 8-bit integer *cmd_code*. The command
         parameters, if any, are supplied with *cmd_data* as a
@@ -342,9 +344,13 @@ class Chipset(object):
         """Send a SetParameters command with the 8-bit *flags* integer."""
         self.command(0x12, chr(flags), timeout=0.1)
 
-    def rf_configuration(self, cfg_item, cfg_data):
+    def rf_configuration(self, cfg_item: int, cfg_data: Union[bytearray, str]):
         """Send an RFConfiguration command."""
-        self.command(0x32, chr(cfg_item) + bytearray(cfg_data), timeout=0.1)
+        if type(cfg_data) is str:
+            buff = chr(cfg_item) + cfg_data
+        else:
+            buff = bytearray([cfg_item]) + cfg_data
+        self.command(0x32, buff, timeout=0.1)
 
     def in_jump_for_dep(self, act_pass, br, passive_data, nfcid3, gi):
         """Send an InJumpForDEP command.
@@ -382,10 +388,10 @@ class Chipset(object):
             self.chipset_error(data)
         return data[2:]
 
-    def in_list_passive_target(self, max_tg, brty, initiator_data):
+    def in_list_passive_target(self, max_tg: int, brty: int, initiator_data: bytearray):
         assert max_tg <= self.in_list_passive_target_max_target
         assert brty in self.in_list_passive_target_brty_range
-        data = chr(1) + chr(brty) + initiator_data
+        data = bytes(1) + bytes(brty) + initiator_data
         data = self.command(0x4A, data, timeout=1.0)
         return data[2:] if data and data[0] > 0 else None
 

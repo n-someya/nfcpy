@@ -45,15 +45,16 @@ listen_dep  no
 ==========  =======  ============
 
 """
+import errno
+import logging
+import os
+import struct
+from typing import Union
+
 import nfc.clf
+from nfc.clf.transport import USB
 from . import pn532
 
-import os
-import errno
-import struct
-from binascii import hexlify
-
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -70,7 +71,7 @@ class Device(pn532.Device):
     def __init__(self, chipset):
         super(Device, self).__init__(chipset, logger=log)
 
-    def sense_tta(self, target):
+    def sense_tta(self, target: nfc.clf.RemoteTarget):
         """Activate the RF field and probe for a Type A Target at 106
         kbps. Other bitrates are not supported. Type 1 Tags are not
         supported because the device does not allow to send the
@@ -79,7 +80,7 @@ class Device(pn532.Device):
         """
         return super(Device, self).sense_tta(target)
 
-    def sense_ttb(self, target):
+    def sense_ttb(self, target: nfc.clf.RemoteTarget):
         """Activate the RF field and probe for a Type B Target.
 
         The RC-S956 can discover Type B Targets (Type 4B Tag) at 106
@@ -92,36 +93,36 @@ class Device(pn532.Device):
         """
         return super(Device, self).sense_ttb(target)
 
-    def sense_ttf(self, target):
+    def sense_ttf(self, target: nfc.clf.RemoteTarget):
         """Activate the RF field and probe for a Type F Target. Bitrates 212
         and 424 kpbs are supported.
 
         """
         return super(Device, self).sense_ttf(target)
 
-    def sense_dep(self, target):
+    def sense_dep(self, target: nfc.clf.RemoteTarget):
         """Search for a DEP Target. Both passive and passive communication
         mode are supported.
 
         """
         return super(Device, self).sense_dep(target)
 
-    def listen_tta(self, target, timeout):
+    def listen_tta(self, target: nfc.clf.RemoteTarget, timeout):
         """Listen as Type A Target is not supported."""
         info = "{device} does not support listen as Type A Target"
         raise nfc.clf.UnsupportedTargetError(info.format(device=self))
 
-    def listen_ttb(self, target, timeout):
+    def listen_ttb(self, target: nfc.clf.RemoteTarget, timeout):
         """Listen as Type B Target is not supported."""
         info = "{device} does not support listen as Type B Target"
         raise nfc.clf.UnsupportedTargetError(info.format(device=self))
 
-    def listen_ttf(self, target, timeout):
+    def listen_ttf(self, target: nfc.clf.RemoteTarget, timeout):
         """Listen as Type F Target is not supported."""
         info = "{device} does not support listen as Type F Target"
         raise nfc.clf.UnsupportedTargetError(info.format(device=self))
 
-    def listen_dep(self, target, timeout):
+    def listen_dep(self, target: nfc.clf.RemoteTarget, timeout):
         """Listen as DEP Target is not supported."""
         info = "{device} does not support listen as DEP Target"
         raise nfc.clf.UnsupportedTargetError(info.format(device=self))
@@ -146,12 +147,12 @@ class Chipset(pn532.Chipset):
     # removed because the RID command can not be send.
     in_list_passive_target_brty_range = (0, 1, 2, 3)
 
-    def __init__(self, transport):
+    def __init__(self, transport: USB):
         self.transport = transport
 
         # read ACR122U firmware version string
-        reader_version = self.ccid_xfr_block(bytearray.fromhex("FF00480000"))
-        if not reader_version.startswith("ACR122U"):
+        reader_version = self.ccid_xfr_block(bytearray.fromhex("FF00480000"))  # type: bytes
+        if not reader_version.startswith(b"ACR122U"):
             log.error("failed to retrieve ACR122U version string")
             raise IOError(errno.ENODEV, os.strerror(errno.ENODEV))
 
@@ -199,7 +200,7 @@ class Chipset(pn532.Chipset):
         # Send an ACK frame, usually to terminate most recent command.
         self.ccid_xfr_block(Chipset.ACK)
 
-    def ccid_xfr_block(self, data, timeout=0.1):
+    def ccid_xfr_block(self, data: bytearray, timeout: float = 0.1):
         """Encapsulate host command *data* into an PC/SC Escape command to
         send to the device and extract the chip response if received
         within *timeout* seconds.
@@ -220,23 +221,29 @@ class Chipset(pn532.Chipset):
             raise IOError(errno.EIO, os.strerror(errno.EIO))
         return frame[10:]
 
-    def command(self, cmd_code, cmd_data, timeout):
+    def command(self, cmd_code: int, cmd_data: Union[str, bytes], timeout: float):
         """Send a host command and return the chip response.
 
         """
-        log.log(logging.DEBUG-1, self.CMD[cmd_code]+" "+hexlify(cmd_data))
+        if cmd_code == 74:
+            cmd_code
 
-        frame = bytearray([0xD4, cmd_code]) + bytearray(cmd_data)
-        frame = bytearray([0xFF, 0x00, 0x00, 0x00, len(frame)]) + frame
+        if type(cmd_data) is str:
+            cmd_data = bytes(cmd_data, 'UTF-8')
 
-        frame = self.ccid_xfr_block(frame, timeout)
-        if not frame or len(frame) < 4:
+        log.log(logging.INFO, "%s %s", self.CMD[cmd_code], cmd_data.hex())
+
+        frame_out = bytearray([0xD4, cmd_code]) + bytearray(cmd_data)
+        frame_out = bytearray([0xFF, 0x00, 0x00, 0x00, len(frame_out)]) + frame_out
+
+        frame_in = self.ccid_xfr_block(frame_out, timeout)
+        if not frame_in or len(frame_in) < 4:
             log.error("insufficient data for decoding chip response")
             raise IOError(errno.EIO, os.strerror(errno.EIO))
-        if not (frame[0] == 0xD5 and frame[1] == cmd_code + 1):
+        if not (frame_in[0] == 0xD5 and frame_in[1] == cmd_code + 1):
             log.error("received invalid chip response")
             raise IOError(errno.EIO, os.strerror(errno.EIO))
-        if not (frame[-2] == 0x90 and frame[-1] == 0x00):
+        if not (frame_in[-2] == 0x90 and frame_in[-1] == 0x00):
             log.error("received pseudo apdu with error status")
             raise IOError(errno.EIO, os.strerror(errno.EIO))
-        return frame[2:-2]
+        return frame_in[2:-2]

@@ -542,7 +542,8 @@ libcrypto = ctypes.util.find_library('crypto')
 if libcrypto is not None:
     if not sys.platform.startswith('linux'):
         log.debug("OpenSSL crypto library binding is only tested on Linux")
-    elif not libcrypto.startswith('libcrypto.so.1.0'):
+    elif 'libcrypto.so.1.0' not in libcrypto:
         log.warning("OpenSSL {} is not supported".format(libcrypto))
+        raise RuntimeError("OpenSSL {} is not supported".format(libcrypto))
     else:
         OpenSSL = OpenSSLWrapper(libcrypto)
