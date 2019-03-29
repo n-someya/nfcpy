@@ -96,7 +96,8 @@ def main(args):
         except ValueError: assert 0, "the '--time T' argument must be a number"
         assert timeout >= 0, "the '--time T' argument must be positive"
     except AssertionError as error:
-        print(str(error), file=sys.stderr); return 2
+        print(str(error), file=sys.stderr)
+        return 2
 
     try:
         clf = nfc.ContactlessFrontend(args['--device'])

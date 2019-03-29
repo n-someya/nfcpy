@@ -939,7 +939,7 @@ class ContactlessFrontend(object):
         they would need to be set after activation. The ``sens_res``,
         ``sdd_res`` and ``sel_res`` attributes must all be provided.
 
-        >>> target = nfc.clf.Localtarget("106A")
+        >>> target = nfc.clf.LocalTarget("106A")
         >>> target.sens_res = bytearray.fromhex("0101"))
         >>> target.sdd_res = bytearray.fromhex("08010203")
         >>> target.sel_res = bytearray.fromhex("00")
