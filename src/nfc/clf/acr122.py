@@ -192,7 +192,7 @@ class Chipset(pn532.Chipset):
          the total buzzer/flash duration defined in bytes 5-8. """
         duration_in_tenths_of_second = min(duration_in_ms / 100, 255)
         timeout_in_seconds = (duration_in_tenths_of_second + 1) / 10.0
-        data = "FF00400D04{:02X}000101".format(duration_in_tenths_of_second)
+        data = "FF00400D04{:02X}000101".format(int(duration_in_tenths_of_second))
         self.ccid_xfr_block(bytearray.fromhex(data),
                             timeout=timeout_in_seconds)
 

@@ -303,11 +303,15 @@ class Chipset(object):
           tx_mode, rx_mode = Chipset.read_register("CIU_TxMode", "CIU_RxMode")
 
         """
-        def addr(r):
+        def addr(r: str) -> int:
             return self.REGBYNAME[r] if type(r) is str else r
 
-        args = [addr(reg) for reg in args]
-        data = ''.join([pack(">H", reg) for reg in args])
+        addresses = [addr(reg) for reg in args]
+
+        data = bytearray(0)
+        for reg in addresses:
+            data += pack(">H", reg)
+
         data = self._read_register(data)
         return list(data) if len(data) > 1 else data[0]
 
@@ -333,6 +337,7 @@ class Chipset(object):
         if len(args) == 2 and type(args[1]) == int:
             args = [args]
         args = [(addr(reg), val) for reg, val in args]
+        # TODO: Fix for Python 3.
         data = ''.join([pack(">HB", reg, val) for reg, val in args])
         self._write_register(data)
 
@@ -391,7 +396,7 @@ class Chipset(object):
     def in_list_passive_target(self, max_tg: int, brty: int, initiator_data: bytearray):
         assert max_tg <= self.in_list_passive_target_max_target
         assert brty in self.in_list_passive_target_brty_range
-        data = bytes(1) + bytes(brty) + initiator_data
+        data = bytes({1}) + bytes({brty}) + initiator_data
         data = self.command(0x4A, data, timeout=1.0)
         return data[2:] if data and data[0] > 0 else None
 
