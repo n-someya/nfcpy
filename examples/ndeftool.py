@@ -177,7 +177,7 @@ def make_wifipassword(args):
     import random, string, hashlib
     if args.password is None:
         printable = string.digits + string.letters + string.punctuation
-        args.password = ''.join([random.choice(printable) for i in xrange(32)])
+        args.password = ''.join([random.choice(printable) for i in range(32)])
     if args.password_id is None:
         args.password_id = random.randint(0x0010, 0xFFFF)
     pkhash = hashlib.sha256(args.pubkey.read()).digest()[0:20]
