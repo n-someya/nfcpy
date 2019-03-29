@@ -19,23 +19,32 @@
 # See the Licence for the specific language governing
 # permissions and limitations under the Licence.
 # -----------------------------------------------------------------------------
-import nfc.tag
-import nfc.dep
-import nfc.llcp
-from . import device
-
+import errno
+import logging
 import os
 import re
-import time
-import errno
 import threading
+import time
+import warnings
+from typing import Union
 
-import logging
+import nfc.dep
+import nfc.llcp
+import nfc.tag
+from . import device
+
 log = logging.getLogger(__name__)
 
 
-def print_data(data):
-    return 'None' if data is None else str(data).encode("hex")
+def print_data(data: Union[None, bytes, bytearray]):
+    if data is None:
+        return 'None'
+    if type(data) in (bytes, bytearray):
+        return data.hex().upper()
+    if type(data) is str:
+        warnings.warn("print_data was called with a str argument", UserWarning)
+        return data
+    raise RuntimeError("Unexpected type!")
 
 
 class ContactlessFrontend(object):
@@ -1114,8 +1123,10 @@ class Target(object):
             if name.startswith('_'):
                 continue
             value = self.__dict__[name]
-            if isinstance(value, (bytearray, str)):
-                value = str(value).encode("hex").upper()
+            if type(value) is bytearray:
+                value = value.hex().upper()
+            elif type(value) is str:
+                raise TypeError("Value should not be str")  # TODO: Fix for Python 3
             attrs.append("{0}={1}".format(name, value))
         return "{brty} {attrs}".format(brty=self.brty, attrs=' '.join(attrs))
 

@@ -478,7 +478,7 @@ class Type2Tag(Tag):
         """
         log.debug("read pages {0} to {1}".format(page, page+3))
 
-        data = self.transceive("\x30"+chr(page % 256), timeout=0.005)
+        data = self.transceive(bytes([0x30, page % 256]), timeout=0.005)
 
         if len(data) == 1 and data[0] & 0xFA == 0x00:
             log.debug("received nak response")
@@ -558,7 +558,7 @@ class Type2Tag(Tag):
             self._current_sector = sector
         return self._current_sector
 
-    def transceive(self, data, timeout=0.1, retries=2):
+    def transceive(self, data: bytes, timeout=0.1, retries=2):
         """Send a Type 2 Tag command and receive the response.
 
         :meth:`transceive` is a type 2 tag specific wrapper around the
@@ -572,7 +572,10 @@ class Type2Tag(Tag):
         Command execution errors raise :exc:`Type2TagCommandError`.
 
         """
-        log.debug(">> {0} ({1:f}s)".format(hexlify(data), timeout))
+        if type(data) is str:
+            raise TypeError("Arg should not be str")  # TODO: Fix for Python 3
+
+        log.debug(">> %s (%fs)", data.hex(), timeout)
 
         if not self.target:
             # Sometimes we have to (re)sense the target during

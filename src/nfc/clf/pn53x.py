@@ -25,7 +25,7 @@ interface chips, namely the NXP PN531, PN532, PN533 and the Sony
 RC-S956.
 
 """
-from typing import Union
+from typing import Union, Tuple, List, Dict
 
 import nfc.clf
 from . import device
@@ -104,8 +104,8 @@ class Chipset(object):
         0x632D: "CIU_RFT2",
         0x632E: "CIU_RFT3",
         0x632F: "CIU_RFT4",
-    }
-    REGBYNAME = {v: k for k, v in six.iteritems(REG)}
+    }  # type: Dict[int, str]
+    REGBYNAME = {v: k for k, v in six.iteritems(REG)}  # type: Dict[str, int]
 
     class Error(Exception):
         def __init__(self, errno, strerr):
@@ -330,15 +330,16 @@ class Chipset(object):
           Chipset.write_register((0x6301, 0x00), ("CIU_TxMode", 0x00))
 
         """
-        def addr(r):
-            return self.REGBYNAME[r] if type(r) is str else r
-
-        assert type(args) in (tuple, list)
+        # Translate separate register and value arguments into a 2-tuple
         if len(args) == 2 and type(args[1]) == int:
-            args = [args]
-        args = [(addr(reg), val) for reg, val in args]
-        # TODO: Fix for Python 3.
-        data = ''.join([pack(">HB", reg, val) for reg, val in args])
+            args = [args]  # type: List[Tuple[Union[str, int], int]]
+
+        data = bytearray(0)
+        for reg, val in args:  # type: Tuple[Union[str, int], int]
+            if type(reg) is str:
+                reg = self.REGBYNAME[reg]  # type: int
+            data += pack(">HB", reg, val)
+
         self._write_register(data)
 
     def _write_register(self, data):
@@ -355,7 +356,8 @@ class Chipset(object):
             buff = chr(cfg_item) + cfg_data
         else:
             buff = bytearray([cfg_item]) + cfg_data
-        self.command(0x32, buff, timeout=0.1)
+        # Timeout has been raised to 1.0 from 0.1 here to support ACR122U
+        self.command(0x32, buff, timeout=1.0)
 
     def in_jump_for_dep(self, act_pass, br, passive_data, nfcid3, gi):
         """Send an InJumpForDEP command.

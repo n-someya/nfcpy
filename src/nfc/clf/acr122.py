@@ -225,15 +225,12 @@ class Chipset(pn532.Chipset):
         """Send a host command and return the chip response.
 
         """
-        if cmd_code == 74:
-            cmd_code
-
         if type(cmd_data) is str:
             cmd_data = bytes(cmd_data, 'UTF-8')
 
-        log.log(logging.INFO, "%s %s", self.CMD[cmd_code], cmd_data.hex())
+        log.log(logging.DEBUG-1, "%s %s", self.CMD[cmd_code], cmd_data.hex())
 
-        frame_out = bytearray([0xD4, cmd_code]) + bytearray(cmd_data)
+        frame_out = bytearray([0xD4, cmd_code]) + cmd_data
         frame_out = bytearray([0xFF, 0x00, 0x00, 0x00, len(frame_out)]) + frame_out
 
         frame_in = self.ccid_xfr_block(frame_out, timeout)
