@@ -327,7 +327,7 @@ class Type4Tag(nfc.tag.Tag):
 
             offset = 0
             while offset < len(data):
-                offset += self._update_binary(offset, buffer(data, offset))
+                offset += self._update_binary(offset, memoryview(data)[offset:])
 
             if nlen:
                 self._update_binary(0, nlen)
@@ -341,7 +341,7 @@ class Type4Tag(nfc.tag.Tag):
             offset = self._nlen_size
             data = bytearray(self._capacity * [wipe % 256])
             while offset < self.capacity:
-                offset += self._update_binary(offset, buffer(data, offset))
+                offset += self._update_binary(offset, memoryview(data)[offset:])
 
         def _dump_ndef_data(self):
             lines = []
