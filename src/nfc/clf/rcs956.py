@@ -19,7 +19,7 @@
 # See the Licence for the specific language governing
 # permissions and limitations under the Licence.
 # -----------------------------------------------------------------------------
-"""Driver for contacless devices based on the Sony RC-S956
+"""Driver for contactless devices based on the Sony RC-S956
 chipset. Products known to use this chipset are the PaSoRi RC-S330,
 RC-S360, and RC-S370. The RC-S956 connects to the host as a native USB
 device.

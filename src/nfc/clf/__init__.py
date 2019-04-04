@@ -162,7 +162,7 @@ class ContactlessFrontend(object):
             return bool(self.device)
 
     def close(self):
-        """Close the contacless reader device."""
+        """Close the contactless reader device."""
         with self.lock:
             if self.device is not None:
                 try:
@@ -783,7 +783,7 @@ class ContactlessFrontend(object):
 
         **Exceptions**
 
-        * :exc:`~exceptions.IOError` (ENODEV) when a local contacless
+        * :exc:`~exceptions.IOError` (ENODEV) when a local contactless
           communication device has not been opened or communication
           with the local device is no longer possible.
 
@@ -970,7 +970,7 @@ class ContactlessFrontend(object):
 
         **Exceptions**
 
-        * :exc:`~exceptions.IOError` (ENODEV) when a local contacless
+        * :exc:`~exceptions.IOError` (ENODEV) when a local contactless
           communication device has not been opened or communication
           with the local device is no longer possible.
 
@@ -1201,7 +1201,7 @@ class LocalTarget(Target):
 #
 ###############################################################################
 class Error(Exception):
-    """Base class for exceptions specific to the contacless frontend module.
+    """Base class for exceptions specific to the contactless frontend module.
 
     - UnsupportedTargetError
     - CommunicationError
