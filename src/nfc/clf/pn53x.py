@@ -133,7 +133,7 @@ class Chipset(object):
         self.transport.close()
         self.transport = None
 
-    def command(self, cmd_code: int, cmd_data, timeout):
+    def command(self, cmd_code: int, cmd_data, timeout: float):
         """Send a host command and return the chip response. The chip command
         is selected by the 8-bit integer *cmd_code*. The command
         parameters, if any, are supplied with *cmd_data* as a
@@ -253,7 +253,7 @@ class Chipset(object):
         # Send an ACK frame, usually to terminate most recent command.
         self.transport.write(Chipset.ACK)
 
-    def diagnose(self, test, test_data=None):
+    def diagnose(self, test: Union[int, str], test_data=None):
         """Send a Diagnose command. The *test* argument selects the diagnose
         function either by number or the string ``line``, ``rom``, or
         ``ram``. For a ``line`` test the implementation sends the
@@ -351,7 +351,9 @@ class Chipset(object):
         self.command(0x12, chr(flags), timeout=0.1)
 
     def rf_configuration(self, cfg_item: int, cfg_data: Union[bytearray, str]):
-        """Send an RFConfiguration command."""
+        """Send an RFConfiguration command.
+
+        UM0701-02 (PN532 User Manual), s7.3.1"""
         if type(cfg_data) is str:
             buff = chr(cfg_item) + cfg_data
         else:
@@ -362,7 +364,7 @@ class Chipset(object):
     def in_jump_for_dep(self, act_pass, br, passive_data, nfcid3, gi):
         """Send an InJumpForDEP command.
 
-        """
+        UM0701-02 (PN532 User Manual), s7.3.3"""
         assert act_pass in (False, True)
         assert br in (106, 212, 424)
         assert len(passive_data) in (0, 4, 5)
@@ -380,7 +382,7 @@ class Chipset(object):
     def in_jump_for_psl(self, act_pass, br, passive_data, nfcid3, gi):
         """Send an InJumpForPSL command.
 
-        """
+        UM0701-02 (PN532 User Manual), s7.3.4"""
         assert act_pass in (False, True)
         assert br in (106, 212, 424)
         assert len(passive_data) in (0, 4, 5)
@@ -396,6 +398,7 @@ class Chipset(object):
         return data[2:]
 
     def in_list_passive_target(self, max_tg: int, brty: int, initiator_data: bytearray):
+        """UM0701-02 (PN532 User Manual), s7.3.5"""
         assert max_tg <= self.in_list_passive_target_max_target
         assert brty in self.in_list_passive_target_brty_range
         data = bytes([1, brty]) + initiator_data
@@ -403,6 +406,7 @@ class Chipset(object):
         return data[2:] if data and data[0] > 0 else None
 
     def in_atr(self, nfcid3i='', gi=''):
+        """UM0701-02 (PN532 User Manual), s7.3.6"""
         flag = int(bool(nfcid3i)) | (int(bool(gi)) << 1)
         data = chr(1) + chr(flag) + nfcid3i + gi
         data = self.command(0x50, data, timeout=1.5)
@@ -411,18 +415,21 @@ class Chipset(object):
         return data[1:]
 
     def in_psl(self, br_it, br_ti):
+        """UM0701-02 (PN532 User Manual), s7.3.7"""
         data = bytearray([1, br_it, br_ti])
         data = self.command(0x4E, data, timeout=1.0)
         if data is None or data[0] != 0:
             self.chipset_error(data)
 
     def in_data_exchange(self, data, timeout, more=False):
+        """UM0701-02 (PN532 User Manual), s7.3.8"""
         data = self.command(0x40, chr(int(more) << 6 | 0x01) + data, timeout)
         if data is None or data[0] & 0x3f != 0:
             self.chipset_error(data[0] & 0x3f if data else None)
         return data[1:], bool(data[0] & 0x40)
 
     def in_communicate_thru(self, data, timeout):
+        """UM0701-02 (PN532 User Manual), s7.3.9"""
         data = self.command(0x42, data, timeout)
         if timeout > 0:
             if data and data[0] == 0:
@@ -430,28 +437,35 @@ class Chipset(object):
             else:
                 self.chipset_error(data)
 
+    # Not implemented: TgInitAsTarget, UM0701-02 (PN532 User Manual), s7.3.14
+
     def tg_set_general_bytes(self, gb):
+        """UM0701-02 (PN532 User Manual), s7.3.15"""
         data = self.command(0x92, gb, timeout=0.1)
         if data is None or data[0] != 0:
             self.chipset_error(data)
 
     def tg_get_data(self, timeout):
+        """UM0701-02 (PN532 User Manual), s7.3.16"""
         data = self.command(0x86, '', timeout)
         if data is None or data[0] & 0x3f != 0:
             self.chipset_error(data[0] & 0x3f if data else None)
         return data[1:], bool(data[0] & 0x40)
 
     def tg_set_data(self, data, timeout):
+        """UM0701-02 (PN532 User Manual), s7.3.17"""
         data = self.command(0x8E, data, timeout)
         if data is None or data[0] != 0:
             self.chipset_error(data)
 
     def tg_set_meta_data(self, data, timeout):
+        """UM0701-02 (PN532 User Manual), s7.3.18"""
         data = self.command(0x94, data, timeout)
         if data is None or data[0] != 0:
             self.chipset_error(data)
 
     def tg_get_initiator_command(self, timeout):
+        """UM0701-02 (PN532 User Manual), s7.3.19"""
         data = self.command(0x88, '', timeout)
         if timeout > 0:
             if data and data[0] == 0:
@@ -460,11 +474,13 @@ class Chipset(object):
                 self.chipset_error(data)
 
     def tg_response_to_initiator(self, data):
+        """UM0701-02 (PN532 User Manual), s7.3.20"""
         data = self.command(0x90, data, timeout=1.0)
         if data is None or data[0] != 0:
             self.chipset_error(data)
 
     def tg_get_target_status(self):
+        """UM0701-02 (PN532 User Manual), s7.3.21"""
         data = self.command(0x8A, '', timeout=0.1)
         if data[0] == 0x01:
             br_tx = (106, 212, 424)[data[1] >> 4 & 7]

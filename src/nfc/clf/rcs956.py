@@ -48,6 +48,8 @@ listen_dep  yes      Only passive communication mode
 ==========  =======  ============
 
 """
+from typing import Union
+
 import nfc.clf
 from . import pn53x
 
@@ -127,7 +129,7 @@ class Chipset(pn53x.Chipset):
     in_list_passive_target_max_target = 1
     in_list_passive_target_brty_range = (0, 1, 2, 3, 4)
 
-    def diagnose(self, test, test_data=None):
+    def diagnose(self, test: Union[int, str], test_data=None):
         if test == "line":
             size = self.host_command_frame_max_size - 3
             data = bytearray([x & 0xFF for x in range(size)])

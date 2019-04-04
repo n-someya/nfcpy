@@ -22,6 +22,7 @@
 import time
 from binascii import hexlify
 from struct import pack, unpack
+from typing import Union
 
 from . import Tag, TagCommandError
 import nfc.clf
@@ -142,9 +143,9 @@ class Type2Tag(Tag):
             super(Type2Tag.NDEF, self).__init__(tag)
             self._ndef_tlv_offset = 0
 
-        def _read_capability_data(self, tag_memory):
+        def _read_capability_data(self, tag_memory: 'Type2TagMemoryReader'):
             try:
-                if tag_memory[12] != 0xE1:
+                if tag_memory[12] != 0xE1:  # refer NFC Forum, Type 2 Tag Operation Specification, s6.4.1
                     log.debug("ndef management data is not present")
                     return False
                 if tag_memory[13] >> 4 != 1:
@@ -153,7 +154,7 @@ class Type2Tag(Tag):
                 self._readable = bool(tag_memory[15] >> 4 == 0)
                 self._writeable = bool(tag_memory[15] & 0xF == 0)
                 return True
-            except Type2TagCommandError:
+            except Type2TagCommandError as error:
                 log.debug("first four memory pages were unreadable")
                 return False
 
@@ -335,7 +336,7 @@ class Type2Tag(Tag):
         # Verify that the tag is still present. This is implemented as
         # reading page 0-3 (from whatever sector is currently active).
         try:
-            data = self.transceive("\x30\x00")
+            data = self.transceive(b"\x30\x00")
         except Type2TagCommandError as error:
             if error.errno != TIMEOUT_ERROR:
                 log.warning("unexpected error in presence check: %s" % error)
@@ -465,7 +466,7 @@ class Type2Tag(Tag):
         tag_memory.synchronize()
         return True
 
-    def read(self, page):
+    def read(self, page: int):
         """Send a READ command to retrieve data from the tag.
 
         The *page* argument specifies the offset in multiples of 4
@@ -474,6 +475,8 @@ class Type2Tag(Tag):
         outside the readable memory range.
 
         Command execution errors raise :exc:`Type2TagCommandError`.
+
+        Reference: NFC Forum, Type 2 Tag Operation Specification, s5.1
 
         """
         log.debug("read pages {0} to {1}".format(page, page+3))
@@ -507,7 +510,7 @@ class Type2Tag(Tag):
             raise ValueError("data must be a four byte string or array")
 
         log.debug("write {0} to page {1}".format(hexlify(data), page))
-        rsp = self.transceive("\xA2" + chr(page % 256) + data)
+        rsp = self.transceive(bytes([0xA2, page % 256]) + data)
 
         if len(rsp) != 1:
             log.debug("invalid response " + hexlify(data))
@@ -584,15 +587,18 @@ class Type2Tag(Tag):
             # "unrecoverable timeout error".
             raise Type2TagCommandError(nfc.tag.TIMEOUT_ERROR)
 
+        error = None
         started = time.time()
         for retry in range(1 + retries):
             try:
-                data = self.clf.exchange(data, timeout)
+                data = self.clf.exchange(data, timeout)  # type: bytearray
                 break
-            except nfc.clf.CommunicationError as error:
+            except nfc.clf.CommunicationError as ex:
+                error = ex
                 reason = error.__class__.__name__
                 log.debug("%s after %d retries" % (reason, retry))
         else:
+            # We only get here if the for loop doesn't break; ie, if we exceed our maximum retries
             if type(error) is nfc.clf.TimeoutError:
                 raise Type2TagCommandError(nfc.tag.TIMEOUT_ERROR)
             if type(error) is nfc.clf.TransmissionError:
@@ -622,7 +628,7 @@ class Type2TagMemoryReader(object):
             tag_memory.synchronize()
 
     """
-    def __init__(self, tag):
+    def __init__(self, tag: Type2Tag):
         assert isinstance(tag, Type2Tag)
         self._data_from_tag = bytearray()
         self._data_in_cache = bytearray()
@@ -631,7 +637,7 @@ class Type2TagMemoryReader(object):
     def __len__(self):
         return len(self._data_from_tag)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: Union[slice, int]):
         if isinstance(key, slice):
             start, stop, step = key.indices(0x100000)
             if stop > len(self):
