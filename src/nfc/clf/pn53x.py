@@ -25,7 +25,7 @@ interface chips, namely the NXP PN531, PN532, PN533 and the Sony
 RC-S956.
 
 """
-from typing import Union, Tuple, List, Dict
+from typing import Union, Tuple, List, Dict, Optional
 
 import nfc.clf
 from . import device
@@ -398,7 +398,7 @@ class Chipset(object):
     def in_list_passive_target(self, max_tg: int, brty: int, initiator_data: bytearray):
         assert max_tg <= self.in_list_passive_target_max_target
         assert brty in self.in_list_passive_target_brty_range
-        data = bytes({1}) + bytes({brty}) + initiator_data
+        data = bytes([1, brty]) + initiator_data
         data = self.command(0x4A, data, timeout=1.0)
         return data[2:] if data and data[0] > 0 else None
 
@@ -480,8 +480,8 @@ class Device(device.Device):
     # functionality that is identical or needed by most of the drivers
     # that inherit from pn53x.
 
-    def __init__(self, chipset, logger):
-        self.chipset = chipset
+    def __init__(self, chipset: Chipset, logger):
+        self.chipset = chipset  # type: Optional[Chipset]
         self.log = logger
 
         try:
