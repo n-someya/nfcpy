@@ -183,9 +183,37 @@ class Chipset(pn532.Chipset):
         self.transport.close()
         self.transport = None
 
+    def set_buzzer_and_led_manually(self,
+                                    led_state_control: int,
+                                    t1_dur: float, t2_dur: float,
+                                    reps: int, buzz_link: int):
+        """
+        Control the buzzer and LEDs.
+
+        Durations are number of seconds as a float. Internally it must be in multiples of 100ms.
+        """
+
+        if type(t1_dur) is float:
+            t1_dur = int(t1_dur * 10)  # convert to unit of "100s of milliseconds"
+        if type(t2_dur) is float:
+            t2_dur = int(t2_dur * 10)  # convert to unit of "100s of milliseconds"
+
+        data = bytearray([
+            0xFF, 0x00, 0x40, led_state_control, 0x04,
+            t1_dur, t2_dur, reps, buzz_link
+        ])
+
+        total_timeout = 0.1 * reps * (t1_dur + t2_dur)
+
+        self.ccid_xfr_block(data, timeout=total_timeout)
+
+    def set_buzzer_manually(self, t1_dur: float, t2_dur: float, reps: int, buzz_link: int):
+        self.set_buzzer_and_led_manually(0, t1_dur, t2_dur, reps, buzz_link)
+
     def set_buzzer_and_led_to_default(self):
         """Turn off buzzer and set LED to default (green only). """
-        self.ccid_xfr_block(bytearray.fromhex("FF00400E0400000000"))
+        # bytearray.fromhex("FF00400E0400000000")
+        self.set_buzzer_and_led_manually(0x0E, 0x00, 0x00, 0x00, 0x00)
 
     def set_buzzer_and_led_to_active(self, duration_in_ms=300):
         """Turn on buzzer and set LED to red only. The timeout here must exceed
@@ -193,8 +221,10 @@ class Chipset(pn532.Chipset):
         duration_in_tenths_of_second = min(duration_in_ms / 100, 255)
         timeout_in_seconds = (duration_in_tenths_of_second + 1) / 10.0
         data = "FF00400D04{:02X}000101".format(int(duration_in_tenths_of_second))
-        self.ccid_xfr_block(bytearray.fromhex(data),
-                            timeout=timeout_in_seconds)
+
+        self.set_buzzer_and_led_manually(0x0D, int(duration_in_tenths_of_second), 0, 0x01, 0x01)
+
+        self.ccid_xfr_block(data, timeout=timeout_in_seconds)
 
     def send_ack(self):
         # Send an ACK frame, usually to terminate most recent command.
