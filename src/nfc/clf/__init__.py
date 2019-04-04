@@ -798,12 +798,14 @@ class ContactlessFrontend(object):
             if target.sel_req and len(target.sel_req) not in (4, 7, 10):
                 raise ValueError("sel_req must be 4, 7, or 10 byte")
             target = self.device.sense_tta(target)
+            if target is None:
+                return None
             log.debug("found %s", target)
-            if target and len(target.sens_res) != 2:
+            if len(target.sens_res) != 2:
                 error = "SENS Response Format Error (wrong length)"
                 log.debug(error)
                 raise ProtocolError(error)
-            if target and target.sens_res[0] & 0b00011111 == 0:
+            if target.sens_res[0] & 0b00011111 == 0:
                 if target.sens_res[1] & 0b00001111 != 0b1100:
                     error = "SENS Response Data Error (T1T config)"
                     log.debug(error)
@@ -849,7 +851,7 @@ class ContactlessFrontend(object):
             for i in range(max(1, options.get('iterations', 1))):
                 started = time.time()
                 for target in targets:
-                    log.debug("sense {0}".format(target))
+                    log.log(logging.DEBUG-1, "sense {0}".format(target))
                     try:
                         if target.atr_req is not None:
                             self.target = sense_dep(target)
