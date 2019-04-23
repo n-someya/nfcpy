@@ -30,7 +30,6 @@ from typing import Union, Tuple, List, Dict, Optional
 import nfc.clf
 from . import device
 
-import six
 import os
 import time
 import errno
@@ -105,7 +104,7 @@ class Chipset(object):
         0x632E: "CIU_RFT3",
         0x632F: "CIU_RFT4",
     }  # type: Dict[int, str]
-    REGBYNAME = {v: k for k, v in six.iteritems(REG)}  # type: Dict[str, int]
+    REGBYNAME = {v: k for k, v in REG.items()}  # type: Dict[str, int]
 
     class Error(Exception):
         def __init__(self, errno, strerr):
