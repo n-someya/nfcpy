@@ -187,7 +187,7 @@ class Device(nfc.clf.device.Device):
         if not target.sensf_req:
             sensf_req = bytearray.fromhex("0600FFFF0100")
         else:
-            sensf_req = chr(len(target.sensf_req)+1) + target.sensf_req
+            sensf_req = (len(target.sensf_req)+1).to_bytes(1, 'little') + target.sensf_req
 
         log.debug("send SENSF_REQ " + hexlify(buffer(sensf_req, 1)))
         try:

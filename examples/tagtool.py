@@ -22,6 +22,10 @@
 # -----------------------------------------------------------------------------
 from __future__ import print_function
 
+import sys
+sys.path.append('../src')
+
+
 import logging
 log = logging.getLogger('main')
 

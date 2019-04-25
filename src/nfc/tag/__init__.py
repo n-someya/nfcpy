@@ -247,7 +247,7 @@ class Tag(object):
             s = self.type + ' ' + repr(self._product)
         except AttributeError:
             s = self.type
-        return s + ' ID=' + self.identifier.encode("hex").upper()
+        return s + ' ID=' + self.identifier
 
     @property
     def clf(self):
@@ -266,9 +266,9 @@ class Tag(object):
         return self._product if hasattr(self, "_product") else self.type
 
     @property
-    def identifier(self):
+    def identifier(self) -> bytes:
         """The unique tag identifier."""
-        return str(self._nfcid)
+        return str(bytes(self._nfcid))
 
     @property
     def ndef(self):

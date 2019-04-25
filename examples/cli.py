@@ -284,7 +284,8 @@ class CommandLineInterface(object):
     def run_once(self):
         if self.options.device is None:
             self.options.device = ['usb']
-            
+        if self.options.command is None:
+            self.options.command = 'show'
         for path in self.options.device:
             try:
                 clf = nfc.ContactlessFrontend(path)

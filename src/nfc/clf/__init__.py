@@ -586,7 +586,7 @@ class ContactlessFrontend(object):
         try:
             while not terminate():
                 if rdwr_options:
-                    result = self._rdwr_connect(rdwr_options, terminate)
+                    result = self._rdwr_connect(rdwr_options, terminate) # NOTE
                     if bool(result) is True:
                         return result
                 if llcp_options:

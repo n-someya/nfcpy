@@ -159,15 +159,15 @@ class TTY(object):
                 frame += self.tty.read(3)
                 LEN = frame[5] << 8 | frame[6]
             frame += self.tty.read(LEN + 1)
-            log.log(logging.DEBUG-1, "<<< %s", hexlify(frame))
+            log.log(logging.DEBUG-1, "<<< {}".format(hexlify(frame)))
             return frame
 
-    def write(self, frame):
+    def write(self, frame: bytearray):
         if self.tty is not None:
-            log.log(logging.DEBUG-1, ">>> %s", hexlify(frame))
+            log.log(logging.DEBUG-1, ">>> {}".format(hexlify(frame)))
             self.tty.flushInput()
             try:
-                self.tty.write(str(frame))
+                self.tty.write(frame)
             except serial.SerialTimeoutException:
                 raise IOError(errno.EIO, os.strerror(errno.EIO))
 
@@ -324,15 +324,17 @@ class USB(object):
                 raise IOError(errno.EIO, os.strerror(errno.EIO))
 
             frame = bytearray(frame)
-            log.log(logging.DEBUG-1, "<<< %s", hexlify(frame))
+            log.log(logging.DEBUG-1, "<<< {}".format(hexlify(frame)))
             return frame
 
     def write(self, frame, timeout=0):
         if self.usb_out is not None:
-            log.log(logging.DEBUG-1, ">>> %s", hexlify(frame))
+            log.log(logging.DEBUG-1, ">>> {}".format(frame))
             try:
                 ep_addr = self.usb_out.getAddress()
-                self.usb_dev.bulkWrite(ep_addr, bytes(frame), timeout)
+                if type(frame) == str:
+                    frame = bytearray(frame, 'utf-8')
+                self.usb_dev.bulkWrite(ep_addr, frame, timeout)
                 if len(frame) % self.usb_out.getMaxPacketSize() == 0:
                     self.usb_dev.bulkWrite(ep_addr, b'', timeout)
             except libusb.USBErrorTimeout:

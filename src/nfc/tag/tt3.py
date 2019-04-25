@@ -683,16 +683,18 @@ class Type3Tag(nfc.tag.Tag):
 
         """
         idm = self.idm if send_idm else bytearray()
-        cmd = chr(2+len(idm)+len(cmd_data)) + chr(cmd_code) + idm + cmd_data
+        cmd = (2+len(idm)+len(cmd_data)).to_bytes(1, 'little') + (cmd_code).to_bytes(1, 'little') + idm + cmd_data
         log.debug(">> {0:02x} {1:02x} {2} {3} ({4}s)".format(
             cmd[0], cmd[1], hexlify(cmd[2:10]), hexlify(cmd[10:]), timeout))
 
         started = time.time()
+        error = None
         for retry in range(3):
             try:
                 rsp = self.clf.exchange(cmd, timeout)
                 break
-            except nfc.clf.CommunicationError as error:
+            except nfc.clf.CommunicationError as err:
+                error = err
                 reason = error.__class__.__name__
                 log.debug("%s after %d retries" % (reason, retry))
         else:
